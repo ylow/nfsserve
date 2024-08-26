@@ -22,12 +22,12 @@ impl TransactionTracker {
     /// Returns `true` if the transaction is a retransmission, `false` otherwise.
     pub fn is_retransmission(&self, xid: u32, client_addr: &str) -> bool {
         let key = (xid, client_addr.to_string());
-        let mut xids = self.transactions.lock().expect("unable to unlock transactions mutex");
-        housekeeping(&mut xids, self.retention_period);
-        if xids.contains_key(&key) {
+        let mut transactions = self.transactions.lock().expect("unable to unlock transactions mutex");
+        housekeeping(&mut transactions, self.retention_period);
+        if transactions.contains_key(&key) {
             true
         } else {
-            xids.insert(key, TransactionState::InProgress);
+            transactions.insert(key, TransactionState::InProgress);
             false
         }
     }
@@ -35,10 +35,10 @@ impl TransactionTracker {
     /// Marks the transaction as processed.
     pub fn mark_processed(&self, xid: u32, client_addr: &str) {
         let key = (xid, client_addr.to_string());
-        let completed = SystemTime::now();
+        let completion_time = SystemTime::now();
         let mut transactions = self.transactions.lock().expect("unable to unlock transactions mutex");
         if let Some(tx) = transactions.get_mut(&key) {
-            *tx = TransactionState::Completed(completed);
+            *tx = TransactionState::Completed(completion_time);
         }
     }
 }
@@ -47,7 +47,7 @@ fn housekeeping(transactions: &mut HashMap<(u32, String), TransactionState>, max
     let mut cutoff = SystemTime::now() - max_age;
     transactions.retain(|_, v| match v {
         TransactionState::InProgress => true,
-        TransactionState::Completed(completed) => completed >= &mut cutoff,
+        TransactionState::Completed(completion_time) => completion_time >= &mut cutoff,
     });
 }
 
