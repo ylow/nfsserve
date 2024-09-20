@@ -17,6 +17,7 @@ pub struct NFSTcpListener<T: NFSFileSystem + Send + Sync + 'static> {
     port: u16,
     arcfs: Arc<T>,
     mount_signal: Option<mpsc::Sender<bool>>,
+    export_name: Arc<String>,
 }
 
 pub fn generate_host_ip(hostnum: u16) -> String {
@@ -164,7 +165,24 @@ impl<T: NFSFileSystem + Send + Sync + 'static> NFSTcpListener<T> {
             port,
             arcfs,
             mount_signal: None,
+            export_name: Arc::from("/".to_string()),
         })
+    }
+
+    /// Sets an optional NFS export name.
+    ///
+    /// - `export_name`: The desired export name without slashes.
+    ///
+    /// Example: Name `foo` results in the export path `/foo`.
+    /// Default path is `/` if not set.
+    pub fn with_export_name<S: AsRef<str>>(&mut self, export_name: S) {
+        self.export_name = Arc::new(format!(
+            "/{}",
+            export_name
+                .as_ref()
+                .trim_end_matches('/')
+                .trim_start_matches('/')
+        ))
     }
 }
 
@@ -197,6 +215,7 @@ impl<T: NFSFileSystem + Send + Sync + 'static> NFSTcp for NFSTcpListener<T> {
                 auth: crate::rpc::auth_unix::default(),
                 vfs: self.arcfs.clone(),
                 mount_signal: self.mount_signal.clone(),
+                export_name: self.export_name.clone(),
             };
             info!("Accepting connection from {}", context.client_addr);
             debug!("Accepting socket {:?} {:?}", socket, context);
