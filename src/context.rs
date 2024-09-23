@@ -2,6 +2,8 @@ use crate::vfs::NFSFileSystem;
 use std::fmt;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use crate::transaction_tracker::TransactionTracker;
+
 #[derive(Clone)]
 pub struct RPCContext {
     pub local_port: u16,
@@ -9,6 +11,7 @@ pub struct RPCContext {
     pub auth: crate::rpc::auth_unix,
     pub vfs: Arc<dyn NFSFileSystem + Send + Sync>,
     pub mount_signal: Option<mpsc::Sender<bool>>,
+    pub transaction_tracker: Arc<TransactionTracker>,
 }
 
 impl fmt::Debug for RPCContext {
