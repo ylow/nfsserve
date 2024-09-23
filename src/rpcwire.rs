@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use std::io::Cursor;
 use std::io::{Read, Write};
-use tracing::{error, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 use crate::context::RPCContext;
 use crate::rpc::*;
@@ -31,7 +31,7 @@ async fn handle_rpc(
     input: &mut impl Read,
     output: &mut impl Write,
     mut context: RPCContext,
-) -> Result<(), anyhow::Error> {
+) -> Result<bool, anyhow::Error> {
     let mut recv = rpc_msg::default();
     recv.deserialize(input)?;
     let xid = recv.xid;
@@ -44,30 +44,42 @@ async fn handle_rpc(
         if call.rpcvers != 2 {
             warn!("Invalid RPC version {} != 2", call.rpcvers);
             rpc_vers_mismatch(xid).serialize(output)?;
-            return Ok(());
+            return Ok(true);
         }
-        if call.prog == nfs::PROGRAM {
-            nfs_handlers::handle_nfs(xid, call, input, output, &context).await
-        } else if call.prog == portmap::PROGRAM {
-            portmap_handlers::handle_portmap(xid, call, input, output, &context)
-        } else if call.prog == mount::PROGRAM {
-            mount_handlers::handle_mount(xid, call, input, output, &context).await
-        } else if call.prog == NFS_ACL_PROGRAM
-            || call.prog == NFS_ID_MAP_PROGRAM
-            || call.prog == NFS_METADATA_PROGRAM
-        {
-            trace!("ignoring NFS_ACL packet");
-            prog_unavail_reply_message(xid).serialize(output)?;
-            Ok(())
-        } else {
-            warn!(
-                "Unknown RPC Program number {} != {}",
-                call.prog,
-                nfs::PROGRAM
-            );
-            prog_unavail_reply_message(xid).serialize(output)?;
-            Ok(())
+
+        if context.transaction_tracker.is_retransmission(xid, &context.client_addr) {
+            // This is a retransmission
+            // Drop the message and return
+            debug!("Retransmission detected, xid: {}, client_addr: {}, call: {:?}", xid, context.client_addr, call);
+            return Ok(false);
         }
+
+        let res = {
+            if call.prog == nfs::PROGRAM {
+                nfs_handlers::handle_nfs(xid, call, input, output, &context).await
+            } else if call.prog == portmap::PROGRAM {
+                portmap_handlers::handle_portmap(xid, call, input, output, &context)
+            } else if call.prog == mount::PROGRAM {
+                mount_handlers::handle_mount(xid, call, input, output, &context).await
+            } else if call.prog == NFS_ACL_PROGRAM
+                || call.prog == NFS_ID_MAP_PROGRAM
+                || call.prog == NFS_METADATA_PROGRAM
+            {
+                trace!("ignoring NFS_ACL packet");
+                prog_unavail_reply_message(xid).serialize(output)?;
+                Ok(())
+            } else {
+                warn!(
+                    "Unknown RPC Program number {} != {}",
+                    call.prog,
+                    nfs::PROGRAM
+                );
+                prog_unavail_reply_message(xid).serialize(output)?;
+                Ok(())
+            }
+        }.map(|_| true);
+        context.transaction_tracker.mark_processed(xid, &context.client_addr);
+        res
     } else {
         error!("Unexpectedly received a Reply instead of a Call");
         Err(anyhow!("Bad RPC Call format"))
@@ -182,9 +194,12 @@ impl SocketMessageHandler {
                         error!("RPC Error: {:?}", e);
                         let _ = send.send(Err(e));
                     }
-                    Ok(_) => {
+                    Ok(true) => {
                         let _ = std::io::Write::flush(&mut write_cursor);
                         let _ = send.send(Ok(write_buf));
+                    }
+                    Ok(false) => {
+                        // do not reply
                     }
                 }
             });

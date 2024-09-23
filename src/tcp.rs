@@ -6,10 +6,12 @@ use async_trait::async_trait;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::{io, net::IpAddr};
+use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
+use crate::transaction_tracker::TransactionTracker;
 
 /// A NFS Tcp Connection Handler
 pub struct NFSTcpListener<T: NFSFileSystem + Send + Sync + 'static> {
@@ -18,6 +20,7 @@ pub struct NFSTcpListener<T: NFSFileSystem + Send + Sync + 'static> {
     arcfs: Arc<T>,
     mount_signal: Option<mpsc::Sender<bool>>,
     export_name: Arc<String>,
+    transaction_tracker: Arc<TransactionTracker>,
 }
 
 pub fn generate_host_ip(hostnum: u16) -> String {
@@ -166,6 +169,7 @@ impl<T: NFSFileSystem + Send + Sync + 'static> NFSTcpListener<T> {
             arcfs,
             mount_signal: None,
             export_name: Arc::from("/".to_string()),
+            transaction_tracker: Arc::new(TransactionTracker::new(Duration::from_secs(60))),
         })
     }
 
@@ -216,6 +220,7 @@ impl<T: NFSFileSystem + Send + Sync + 'static> NFSTcp for NFSTcpListener<T> {
                 vfs: self.arcfs.clone(),
                 mount_signal: self.mount_signal.clone(),
                 export_name: self.export_name.clone(),
+                transaction_tracker: self.transaction_tracker.clone(),
             };
             info!("Accepting connection from {}", context.client_addr);
             debug!("Accepting socket {:?} {:?}", socket, context);
