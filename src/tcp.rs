@@ -1,22 +1,23 @@
 use crate::context::RPCContext;
 use crate::rpcwire::*;
+use crate::transaction_tracker::TransactionTracker;
 use crate::vfs::NFSFileSystem;
 use anyhow;
 use async_trait::async_trait;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::{io, net::IpAddr};
 use std::time::Duration;
+use std::{io, net::IpAddr};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
-use crate::transaction_tracker::TransactionTracker;
 
 /// A NFS Tcp Connection Handler
 pub struct NFSTcpListener<T: NFSFileSystem + Send + Sync + 'static> {
     listener: TcpListener,
     port: u16,
+    advertised_port: Option<u16>,
     arcfs: Arc<T>,
     mount_signal: Option<mpsc::Sender<bool>>,
     export_name: Arc<String>,
@@ -154,6 +155,10 @@ impl<T: NFSFileSystem + Send + Sync + 'static> NFSTcpListener<T> {
         }
     }
 
+    pub fn set_advertised_port(&mut self, port: u16) {
+        self.advertised_port = Some(port);
+    }
+
     async fn bind_internal(ip: &str, port: u16, arcfs: Arc<T>) -> io::Result<NFSTcpListener<T>> {
         let ipstr = format!("{ip}:{port}");
         let listener = TcpListener::bind(&ipstr).await?;
@@ -166,6 +171,7 @@ impl<T: NFSFileSystem + Send + Sync + 'static> NFSTcpListener<T> {
         Ok(NFSTcpListener {
             listener,
             port,
+            advertised_port: None,
             arcfs,
             mount_signal: None,
             export_name: Arc::from("/".to_string()),
@@ -215,6 +221,7 @@ impl<T: NFSFileSystem + Send + Sync + 'static> NFSTcp for NFSTcpListener<T> {
             let (socket, _) = self.listener.accept().await?;
             let context = RPCContext {
                 local_port: self.port,
+                advertised_port: self.advertised_port.unwrap_or(self.port),
                 client_addr: socket.peer_addr().unwrap().to_string(),
                 auth: crate::rpc::auth_unix::default(),
                 vfs: self.arcfs.clone(),

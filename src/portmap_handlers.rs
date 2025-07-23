@@ -89,7 +89,7 @@ pub fn pmapproc_getport(
     mapping.deserialize(read)?;
     debug!("pmapproc_getport({:?}, {:?}) ", xid, mapping);
     make_success_reply(xid).serialize(output)?;
-    let port = context.local_port as u32;
+    let port = context.advertised_port as u32;
     debug!("\t{:?} --> {:?}", xid, port);
     port.serialize(output)?;
     Ok(())
