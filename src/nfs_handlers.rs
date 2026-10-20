@@ -2024,7 +2024,7 @@ pub async fn nfsproc3_mkdir(
         },
     };
 
-    let res = context.vfs.mkdir(dirid, &args.dirops.name).await;
+    let res = context.vfs.mkdir(dirid, &args.dirops.name, &args.attributes).await;
 
     // Re-read dir attributes for post op attr
     let post_dir_attr = match context.vfs.getattr(dirid).await {
@@ -2365,7 +2365,7 @@ mod tests {
         async fn create_exclusive(&self, _dirid: fileid3, _filename: &filename3) -> Result<fileid3, nfsstat3> {
             Err(nfsstat3::NFS3ERR_NOTSUPP)
         }
-        async fn mkdir(&self, _dirid: fileid3, _dirname: &filename3) -> Result<(fileid3, fattr3), nfsstat3> {
+        async fn mkdir(&self, _dirid: fileid3, _dirname: &filename3, _attr: &sattr3) -> Result<(fileid3, fattr3), nfsstat3> {
             Err(nfsstat3::NFS3ERR_NOTSUPP)
         }
         async fn remove(&self, _dirid: fileid3, _filename: &filename3) -> Result<(), nfsstat3> {

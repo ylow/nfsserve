@@ -136,10 +136,10 @@ pub trait NFSFileSystem: Sync {
     /// this should return Err(nfsstat3::NFS3ERR_ROFS)
     async fn create_exclusive(&self, dirid: fileid3, filename: &filename3) -> Result<fileid3, nfsstat3>;
 
-    /// Makes a directory with the following attributes.
+    /// Makes a directory with the given attributes (typically its mode).
     /// If not supported dur to readonly file system
     /// this should return Err(nfsstat3::NFS3ERR_ROFS)
-    async fn mkdir(&self, dirid: fileid3, dirname: &filename3) -> Result<(fileid3, fattr3), nfsstat3>;
+    async fn mkdir(&self, dirid: fileid3, dirname: &filename3, attr: &sattr3) -> Result<(fileid3, fattr3), nfsstat3>;
 
     /// Removes a file.
     /// If not supported due to readonly file system
